@@ -1,3 +1,4 @@
 blocksnet[ipynb, torch]==1.0.0.a9
 contextily
 seaborn
+esda
