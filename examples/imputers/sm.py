@@ -1,6 +1,6 @@
 import geopandas as gpd
 import pandas as pd
-from .sknn import SknnImputer, GEOM_COLS
+from .base import BaseImputer
 from sklearn.preprocessing import StandardScaler
 from sklearn.cluster import KMeans
 from catboost import CatBoostClassifier
@@ -31,12 +31,6 @@ class Spacematrix():
         return pd.DataFrame(result, columns=[CLUSTER_COLUMN], index=df.index)
 
     def _preprocess(self, blocks_df : pd.DataFrame) -> pd.DataFrame:
-        blocks_df = blocks_df.copy()
-        for column in ['build_floor_area', 'footprint_area', 'site_area']:
-            if not column in blocks_df.columns:
-                raise RuntimeError(f'{column} not in columns')
-        blocks_df['fsi'] = blocks_df['build_floor_area'] / blocks_df['site_area']
-        blocks_df['gsi'] = blocks_df['footprint_area'] / blocks_df['site_area']
         return blocks_df[['fsi', 'gsi']].copy()
 
     def run(self, blocks_df : pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
@@ -56,7 +50,7 @@ class Spacematrix():
 
         return blocks_df, clusters_df
 
-class SmImputer(SknnImputer):
+class SmImputer(BaseImputer):
 
     def __init__(
         self, 
@@ -86,19 +80,11 @@ class SmImputer(SknnImputer):
 
         features_cols = self.features_cols
         additional_cols = self.additional_cols
-        classifier_cols = [*GEOM_COLS, SITE_AREA_COLUMN, *additional_cols]
+        classifier_cols = [SITE_AREA_COLUMN, *additional_cols]
         
-        sm_df, clusters_df = self._spacematrix(known_gdf)
+        sm_df, clusters_df = self._spacematrix(known_gdf[features_cols])
         classifier = CatBoostClassifier(verbose=False)
         classifier.fit(known_gdf[classifier_cols], sm_df[CLUSTER_COLUMN])
-        
-        neighbors = self._get_neighbors(known_gdf, unknown_gdf)
-
-        imputed_values = []
-        for _, d in neighbors.items():
-            gdf, _ = d
-            imputed_values.append(gdf[features_cols].mean(axis=0))
-        unknown_gdf[features_cols] = imputed_values
         
         probs = classifier.predict_proba(unknown_gdf[classifier_cols])
         labels = classifier.classes_
@@ -112,8 +98,5 @@ class SmImputer(SknnImputer):
 
         unknown_gdf['fsi'] = fsi_weighted
         unknown_gdf['gsi'] = gsi_weighted
-
-        unknown_gdf['build_floor_area'] = (unknown_gdf['build_floor_area'] + unknown_gdf['fsi'] * unknown_gdf['site_area']) /2
-        unknown_gdf['footprint_area'] = (unknown_gdf['footprint_area'] + unknown_gdf['gsi'] * unknown_gdf['site_area']) /2
 
         return unknown_gdf[features_cols].copy()

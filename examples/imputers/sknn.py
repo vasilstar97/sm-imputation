@@ -21,6 +21,7 @@ class SknnImputer(BaseImputer):
         return gdf
 
     def _get_neighbors(self, known_gdf : gpd.GeoDataFrame, unknown_gdf : gpd.GeoDataFrame) -> dict[int, gpd.GeoDataFrame]:
+        
         nbrs = NearestNeighbors(n_neighbors=self.n_neighbors, algorithm=self.algorithm)
         nbrs.fit(known_gdf[GEOM_COLS])
         
